@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.30.3
+    container_name: prometheus
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - '9090:9090'
+    networks:
+      - monitoring_network
+    labels:
+      traefik.foo.frontend.rule: "Host: prometheus.local;"
+      traefik.bar.frontend.rule: "Host: www.prometheus.local;"
+      traefik.port: 9090
+
+  grafana:
+    image: grafana/grafana:6.5.3
+    volumes:
+      - ./grafana:/etc/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=your_password
+    ports:
+      - '3000:3000'
+    networks:
+      - monitoring_network
+    labels:
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.grafana.rule=Host(`grafana.local`)"
+      # - "traefik.http.routers.grafana.entrypoints=web"
+      # - "traefik.http.routers.grafana.loadbalancer.server.port=3000".
+      traefik.foo.frontend.rule: "Host: grafana.local;"
+      traefik.bar.frontend.rule: "Host: www.grafana.local;"
+      traefik.port: 3000
+
+  cadvisor:
+    image: google/cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - '8080:8080'
+    networks:
+      - monitoring_network
+    labels:
+      traefik.foo.frontend.rule: "Host: cadvisor.local;"
+      traefik.bar.frontend.rule: "Host: www.cadvisor.local;"
+      traefik.port: 8080
+
+  node_exporter:
+    image: prom/node-exporter:v1.2.2
+    ports:
+      - '9100:9100'
+    networks:
+      - monitoring_network
+    labels:
+      traefik.foo.frontend.rule: "Host: node_exporter.local;"
+      traefik.bar.frontend.rule: "Host: www.node_exporter.local;"
+      traefik.port: 9100
+
+  traefik:
+    image: traefik:1.7.14
+    restart: always
+    command:
+      - --api
+      - --docker
+      - --docker.watch
+      - --logLevel=INFO
+      - --web
+    ports:
+      - "80:80"
+      - "8085:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - monitoring_network
+
+networks:
+  monitoring_network:
