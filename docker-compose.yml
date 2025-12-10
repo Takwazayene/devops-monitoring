@@ -1,85 +1,100 @@
-version: '3.8'
+version: "3.8"
 
 services:
+
+  ##############################
+  # TRAEFIK (Reverse Proxy)
+  ##############################
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8085:8080"  # dashboard Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - monitoring_network
+
+  ##############################
+  # PROMETHEUS
+  ##############################
   prometheus:
-    image: prom/prometheus:v2.30.3
+    image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./prometheus:/etc/prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
     ports:
-      - '9090:9090'
+      - "9090:9090"
     networks:
       - monitoring_network
     labels:
-      traefik.foo.frontend.rule: "Host: prometheus.local;"
-      traefik.bar.frontend.rule: "Host: www.prometheus.local;"
-      traefik.port: 9090
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.local`)"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
 
+  ##############################
+  # GRAFANA
+  ##############################
   grafana:
-    image: grafana/grafana:6.5.3
-    volumes:
-      - ./grafana:/etc/grafana
-      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    image: grafana/grafana:latest
+    container_name: grafana
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=your_password
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     ports:
-      - '3000:3000'
+      - "3000:3000"
     networks:
       - monitoring_network
     labels:
-      #- "traefik.enable=true"
-      #- "traefik.http.routers.grafana.rule=Host(`grafana.local`)"
-      # - "traefik.http.routers.grafana.entrypoints=web"
-      # - "traefik.http.routers.grafana.loadbalancer.server.port=3000".
-      traefik.foo.frontend.rule: "Host: grafana.local;"
-      traefik.bar.frontend.rule: "Host: www.grafana.local;"
-      traefik.port: 3000
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.local`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
+  ##############################
+  # cADVISOR
+  ##############################
   cadvisor:
-    image: google/cadvisor
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
-      - '8080:8080'
+      - "8080:8080"
     networks:
       - monitoring_network
     labels:
-      traefik.foo.frontend.rule: "Host: cadvisor.local;"
-      traefik.bar.frontend.rule: "Host: www.cadvisor.local;"
-      traefik.port: 8080
+      - "traefik.enable=true"
+      - "traefik.http.routers.cadvisor.rule=Host(`cadvisor.local`)"
+      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
 
+  ##############################
+  # NODE EXPORTER
+  ##############################
   node_exporter:
-    image: prom/node-exporter:v1.2.2
+    image: prom/node-exporter:latest
+    container_name: node_exporter
     ports:
-      - '9100:9100'
+      - "9100:9100"
     networks:
       - monitoring_network
     labels:
-      traefik.foo.frontend.rule: "Host: node_exporter.local;"
-      traefik.bar.frontend.rule: "Host: www.node_exporter.local;"
-      traefik.port: 9100
-
-  traefik:
-    image: traefik:1.7.14
-    restart: always
-    command:
-      - --api
-      - --docker
-      - --docker.watch
-      - --logLevel=INFO
-      - --web
-    ports:
-      - "80:80"
-      - "8085:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - monitoring_network
+      - "traefik.enable=true"
+      - "traefik.http.routers.node_exporter.rule=Host(`node-exporter.local`)"
+      - "traefik.http.services.node_exporter.loadbalancer.server.port=9100"
 
 networks:
   monitoring_network:
+
+volumes:
+  prometheus-data:
